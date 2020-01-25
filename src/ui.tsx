@@ -11,29 +11,73 @@ const App = () => {
 
   useEffect(() => {
     window.addEventListener('message', onMessage)
+    parent.postMessage({ pluginMessage: { type: 'init' } }, '*')
   })
 
   const [repositoryUrl, setRepositoryUrl] = useState<string>('')
   const [issueTitle, setIssueTitle] = useState<string>('')
   const [issueBody, setIssueBody] = useState<string>('')
+  const [imageArr, setImageArr] = useState<Uint8Array>(null)
   const [token, setToken] = useState<string>('')
+
+  const sendInit = () => {
+    parent.postMessage({ pluginMessage: { type: 'init' } }, '*')
+  }
 
   const onCreateissue = async () => {
     const octokit = new Octokit({
       auth: token,
     })
+
     const urlPathArr = new URL(repositoryUrl).pathname.split('/')
-    await octokit.issues.make({
-      owner: urlPathArr[1],
-      repo: urlPathArr[2],
+    const owner = urlPathArr[1]
+    const repo = urlPathArr[2]
+
+    const branchList = await octokit.repos.listBranches({
+      owner,
+      repo
+    })
+    const hasFigmaBranch = branchList.some(branch => branch.name = 'figma-issue')
+
+    if (!hasFigmaBranch) {
+      const masteRref = await octokit.git.getRef({
+        owner,
+        repo,
+        ref: 'master'
+      })
+      await octokit.git.createRef({
+        owner,
+        repo,
+        ref: 'refs/heads/figma-issue',
+        sha: masteRref.object.sha,
+      })
+    }
+
+    // upload image
+    const ascii = new Uint8Array(imageArr);
+    const b64encoded = btoa(String.fromCharCode.apply(null, ascii));
+    const { data: { content } } = await octokit.repos.createOrUpdateFile({
+      owner,
+      repo,
+      path: `${issueTitle}.png`,
+      message: 'add figma issue image',
+      content: b64encoded,
+    })
+    const imageUrl = content.url
+
+    await octokit.issues.create({
+      owner,
+      repo,
       title: issueTitle,
-      body: issueBody,
+      body: `${issueBody}
+      ${imageUrl}`,
     })
   }
 
   const onMessage = (event: MessageEvent) => {
     const message = event.data.pluginMessage
     setIssueTitle(message.node.name)
+    setImageArr(message.imageArr)
   }
 
   const onQuit = () => {
@@ -63,6 +107,7 @@ const App = () => {
       <div>
         <button onClick={onCreateissue}>Create</button>
         <button onClick={onQuit}>Quit</button>
+        <button onClick={sendInit}>log</button>
       </div>
     </div>
   )
