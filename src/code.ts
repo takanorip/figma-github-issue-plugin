@@ -1,20 +1,24 @@
 figma.showUI(__html__)
 
 figma.ui.onmessage = msg => {
-  if (msg.type === 'create-rectangles') {
-    const nodes = []
-
-    for (let i = 0; i < msg.count; i++) {
-      const rect = figma.createRectangle()
-      rect.x = i * 150
-      rect.fills = [{type: 'SOLID', color: {r: 1, g: 0.5, b: 0}}]
-      figma.currentPage.appendChild(rect)
-      nodes.push(rect)
+  if (msg.type === 'init') {
+    if (figma.currentPage.selection) {
+      const node = figma.currentPage.selection
+      figma.ui.postMessage({
+        node,
+        error: null,
+      })
+    } else {
+      figma.ui.postMessage({
+        selectedNode: null,
+        error: {
+          type: 'notSelected',
+          message: 'No node is selected'
+        }
+      })
     }
-
-    figma.currentPage.selection = nodes
-    figma.viewport.scrollAndZoomIntoView(nodes)
+  } else if (msg.type === 'quit') {
+    figma.closePlugin()
   }
-
   figma.closePlugin()
 }
